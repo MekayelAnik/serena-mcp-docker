@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/oraios/serena/main/assets/logo.png" alt="Serena Logo" width="200"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/oraios/serena/refs/heads/main/resources/serena-logo.svg" alt="Serena Logo" width="200"></p>
 
 # Serena MCP Server
 
@@ -106,13 +106,13 @@ services:
     container_name: serena-mcp
     restart: unless-stopped
     ports:
-      - "8046:8046"
+      - "9121:9121"
     volumes:
       - /path/to/your/project:/data:rw
       - serena-config:/config
       - serena-cache:/home/serena/.cache
     environment:
-      - PORT=8046
+      - PORT=9121
       - INTERNAL_PORT=38011
       - PUID=1000
       - PGID=1000
@@ -149,10 +149,10 @@ docker run --rm -i \
 
 | Protocol | Endpoint | Description |
 |:---------|:---------|:------------|
-| SHTTP | `http://host-ip:8046/mcp` | Streamable HTTP (default) |
-| SSE | `http://host-ip:8046/sse` | Server-Sent Events |
-| WebSocket | `ws://host-ip:8046/message` | WebSocket |
-| Health | `http://host-ip:8046/healthz` | Health check endpoint |
+| SHTTP | `http://host-ip:9121/mcp` | Streamable HTTP (default) |
+| SSE | `http://host-ip:9121/sse` | Server-Sent Events |
+| WebSocket | `ws://host-ip:9121/message` | WebSocket |
+| Health | `http://host-ip:9121/healthz` | Health check endpoint |
 
 ---
 
@@ -162,7 +162,7 @@ docker run --rm -i \
 
 | Variable | Default | Description |
 |:---------|:-------:|:------------|
-| `PORT` | `8046` | External server port |
+| `PORT` | `9121` | External server port |
 | `INTERNAL_PORT` | `38011` | Internal MCP server port used by supergateway |
 | `PUID` | `1000` | User ID for file permissions |
 | `PGID` | `1000` | Group ID for file permissions |
@@ -290,7 +290,7 @@ Configure in `~/.config/claude-code/mcp.json` or project-level `.mcp.json`:
   "mcpServers": {
     "serena": {
       "transport": "http",
-      "url": "http://host-ip:8046/mcp"
+      "url": "http://host-ip:9121/mcp"
     }
   }
 }
@@ -324,7 +324,7 @@ Configure in `~/.codex/config.json`:
   "mcpServers": {
     "serena": {
       "transport": "http",
-      "url": "http://host-ip:8046/mcp"
+      "url": "http://host-ip:9121/mcp"
     }
   }
 }
@@ -337,7 +337,7 @@ Configure in `~/.codex/config.json`:
   "mcpServers": {
     "serena": {
       "transport": "http",
-      "url": "http://host-ip:8046/mcp"
+      "url": "http://host-ip:9121/mcp"
     }
   }
 }
@@ -350,7 +350,7 @@ Configure in `~/.codex/config.json`:
   "mcpServers": {
     "serena": {
       "transport": "http",
-      "url": "http://host-ip:8046/mcp"
+      "url": "http://host-ip:9121/mcp"
     }
   }
 }
@@ -360,7 +360,7 @@ Configure in `~/.codex/config.json`:
 
 Test the SHTTP endpoint:
 ```bash
-curl -s http://localhost:8046/healthz
+curl -s http://localhost:9121/healthz
 ```
 
 ---
@@ -370,7 +370,7 @@ curl -s http://localhost:8046/healthz
 | Transport | `SERENA_TRANSPORT` | `PROTOCOL` | Port exposed | Use when |
 |:----------|:-------------------|:-----------|:-------------|:---------|
 | Pure stdio (lightest) | `stdio` | `STDIO` | none | Single local client; `docker run -i` only |
-| SSE / streamable-HTTP via HAProxy | `stdio` | `SHTTP` (default) | `$PORT` (8046) | Multiple remote clients, need TLS/QUIC |
+| SSE / streamable-HTTP via HAProxy | `stdio` | `SHTTP` (default) | `$PORT` (9121) | Multiple remote clients, need TLS/QUIC |
 | Direct SSE (no HAProxy) | `sse` | *(any)* | `$SERENA_PORT` (9121) | Dev / debug, single client |
 | Streamable HTTP (MCP spec) | `streamable-http` | *(any)* | `$SERENA_PORT` | MCP spec-compliant HTTP client |
 
@@ -390,7 +390,7 @@ curl -s http://localhost:8046/healthz
 -p 127.0.0.1:24282:24282
 
 # With API key auth at HAProxy layer
--e API_KEY=your-strong-secret -p 8046:8046
+-e API_KEY=your-strong-secret -p 9121:9121
 
 # Non-root UID matching host
 -e PUID=$(id -u) -e PGID=$(id -g)
@@ -452,7 +452,7 @@ Then in your MCP client, call Serena's `activate_project` tool with `/projects/l
 services:
   serena-mcp:
     ports:
-      - "8046:8046"
+      - "9121:9121"
 ```
 
 ### Host Network (Linux Only)
@@ -462,7 +462,7 @@ services:
   serena-mcp:
     network_mode: host
     environment:
-      - PORT=8046
+      - PORT=9121
 ```
 
 ### MACVLAN Network (Advanced)
@@ -530,7 +530,7 @@ Check tag `stable` for production; `<version>` (e.g. `1.1.2`) for pinning.
 
 - Check logs: `docker logs serena-mcp`
 - Verify image pulled: `docker images | grep serena-mcp`
-- Check port conflicts: `ss -tlnp | grep 8046`
+- Check port conflicts: `ss -tlnp | grep 9121`
 
 #### Permission Errors
 
@@ -540,8 +540,8 @@ Check tag `stable` for production; `<version>` (e.g. `1.1.2`) for pinning.
 #### Client Cannot Connect
 
 - Verify container is running: `docker ps | grep serena-mcp`
-- Test health endpoint: `curl http://localhost:8046/healthz`
-- Check firewall rules for port 8046
+- Test health endpoint: `curl http://localhost:9121/healthz`
+- Check firewall rules for port 9121
 - If using HTTPS, ensure certificates are valid
 
 #### `find_references` Returns No Results

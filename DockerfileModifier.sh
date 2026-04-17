@@ -95,7 +95,7 @@ RUN mkdir -p \${SERENA_HOME} \\
        fi
 
 # Use an ARG for the default port
-ARG PORT=8046
+ARG PORT=9121
 
 # Add ARG for API key
 ARG API_KEY=""
@@ -106,7 +106,7 @@ ENV API_KEY=\${API_KEY}
 
 # L7 health check: auto-detects HTTP/HTTPS via ENABLE_HTTPS env var
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \\
-    CMD sh -c 'wget -q --spider --no-check-certificate \$([ "\$ENABLE_HTTPS" = "true" ] && echo https || echo http)://127.0.0.1:\${PORT:-8046}/healthz'
+    CMD sh -c 'wget -q --spider --no-check-certificate \$([ "\$ENABLE_HTTPS" = "true" ] && echo https || echo http)://127.0.0.1:\${PORT:-9121}/healthz'
 
 VOLUME ["/data", "/config"]
 

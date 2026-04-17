@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly DEFAULT_PUID=1000
 readonly DEFAULT_PGID=1000
-readonly DEFAULT_PORT=8046
+readonly DEFAULT_PORT=9121
 readonly DEFAULT_INTERNAL_PORT=38011
 readonly DEFAULT_PROTOCOL="SHTTP"
 readonly DEFAULT_TLS_DAYS=365

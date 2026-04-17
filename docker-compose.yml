@@ -4,14 +4,14 @@ services:
     container_name: serena-mcp
     restart: unless-stopped
     ports:
-      - "8046:8046"
+      - "9121:9121"
     volumes:
       - /path/to/your/project:/data:rw
       - serena-config:/config
       - serena-cache:/home/serena/.cache
     environment:
       # Transport
-      - PORT=8046
+      - PORT=9121
       - INTERNAL_PORT=38011
       - PROTOCOL=SHTTP
       - ENABLE_HTTPS=false
