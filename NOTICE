@@ -1,0 +1,13 @@
+This Docker image packages the following third-party software:
+
+serena-agent
+  Copyright (c) Oraios GmbH (oraios-ai.de)
+  Licensed under the MIT License
+  Source: https://github.com/oraios/serena
+  PyPI: https://pypi.org/project/serena-agent/
+
+The Dockerfile, entrypoint scripts, CI/CD workflows, and all other files
+in this repository are licensed under GPL-3.0-only by:
+
+  MOHAMMAD MEKAYEL ANIK <mekayel.anik@gmail.com>
+  https://github.com/MekayelAnik/serena-mcp-docker

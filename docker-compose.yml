@@ -1,0 +1,39 @@
+services:
+  serena-mcp:
+    image: mekayelanik/serena-mcp:latest
+    container_name: serena-mcp
+    restart: unless-stopped
+    ports:
+      - "8046:8046"
+    volumes:
+      - /path/to/your/project:/data:rw
+      - serena-config:/config
+      - serena-cache:/home/serena/.cache
+    environment:
+      # Transport
+      - PORT=8046
+      - INTERNAL_PORT=38011
+      - PROTOCOL=SHTTP
+      - ENABLE_HTTPS=false
+      - HTTP_VERSION_MODE=auto
+      # Serena core
+      - SERENA_PROJECT=/data
+      - SERENA_CONTEXT=desktop-app
+      - SERENA_TRANSPORT=stdio
+      - SERENA_PORT=9121
+      - SERENA_MODES=
+      - SERENA_LOG_LEVEL=INFO
+      # System
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      # Optional: require Bearer token auth at HAProxy layer
+      # - API_KEY=replace-with-strong-secret
+      # Optional: CORS origins
+      # - CORS=*
+
+volumes:
+  serena-config:
+    driver: local
+  serena-cache:
+    driver: local

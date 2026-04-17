@@ -1,0 +1,12 @@
+build_logs
+build_data
+resources/build_data
+resources/build-timestamp
+resources/tag
+Dockerfile.serena-mcp
+/.vs
+example/
+/Dockerfile.serena-mcp
+/Dockerfile
+.buildx-cache
+.git
