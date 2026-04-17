@@ -61,10 +61,12 @@ RUN mkdir -p /usr/local/sbin && ln -sf /usr/sbin/haproxy /usr/local/sbin/haproxy
     && ln -sf /usr/sbin/gosu /usr/local/bin/su-exec 2>/dev/null || true
 
 # Node.js via NVM (needed by Supergateway stdio->SHTTP bridge)
-# Always installs latest current Node.js — no version pin needed
+# Installed under /opt/nvm so the non-root 'serena' runtime user can
+# traverse into it. /root stays 0700 (default Debian behavior).
 ENV NVM_VERSION=${NVM_VERSION}
-ENV NVM_DIR=/root/.nvm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v\${NVM_VERSION}/install.sh | bash \\
+ENV NVM_DIR=/opt/nvm
+RUN mkdir -p /opt/nvm && chmod 755 /opt /opt/nvm \\
+    && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v\${NVM_VERSION}/install.sh | bash \\
     && . "\$NVM_DIR/nvm.sh" \\
     && nvm install node \\
     && nvm alias default node \\
@@ -74,9 +76,12 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v\${NVM_VERSION}/insta
     && node --version && npm --version
 
 # Install Supergateway (cache mount shares npm cache with previous step)
+# Symlink the binary into /usr/local/bin so the runtime can call it
+# directly without the npx resolver step.
 RUN --mount=type=cache,target=/root/.npm \\
     echo "Installing Supergateway..." && \\
     npm install -g ${SUPERGATEWAY_PKG} --omit=dev --no-audit --no-fund --loglevel error && \\
+    ln -sf "\$(. \$NVM_DIR/nvm.sh && which supergateway)" /usr/local/bin/supergateway && \\
     rm -rf /tmp/* /var/tmp/* && \\
     rm -rf /usr/local/lib/node_modules/npm/man /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/html
 

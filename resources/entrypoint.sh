@@ -500,7 +500,7 @@ generate_haproxy_config() {
         ip_access_check+="    # IP allowlist (only listed IPs may connect)
     acl is_allowed_ip src -f /tmp/haproxy_allowlist.txt
     acl is_allowed_ip src 127.0.0.1 ::1
-    http-request deny deny_status 403 content-type \"application/json\" string '{\"error\":\"Forbidden\",\"message\":\"IP address not allowed\"}' if !is_allowed_ip"
+    http-request deny deny_status 403 content-type \"application/json\" string '{\"error\":\"Forbidden\",\"message\":\"IP address not allowed\"}' if !is_health_check !is_allowed_ip"
     fi
 
     if [[ -z "$ip_access_check" ]]; then
@@ -563,6 +563,17 @@ generate_haproxy_config() {
     escaped_bind_params="$(escape_sed_replacement "$BIND_PARAMS")"
     escaped_quic_bind_line="$(escape_sed_replacement "$QUIC_BIND_LINE")"
 
+    # Alt-Svc header: when the QUIC/h3 listener is active, advertise h3 on
+    # h1/h2 responses so clients can upgrade. Only emitted on TLS responses
+    # and only when the current frontend protocol is not itself h3 (to avoid
+    # a redundant self-advertisement).
+    local alt_svc_header
+    if [[ ",${EFFECTIVE_HTTP_VERSIONS}," == *,h3,* ]]; then
+        alt_svc_header="    http-response set-header Alt-Svc \"h3=\\\":${PORT}\\\"; ma=86400\" if { ssl_fc } !{ fc_http_major eq 3 }"
+    else
+        alt_svc_header="    # Alt-Svc header not emitted (h3 disabled)"
+    fi
+
     sed -e "s|__SERVER_PORT__|${PORT}|g" \
         -e "s|__BIND_PARAMS__|${escaped_bind_params}|g" \
         -e "s|__QUIC_BIND_LINE__|${escaped_quic_bind_line}|g" \
@@ -574,12 +585,14 @@ generate_haproxy_config() {
 
     awk -v replacement="$api_key_check" -v replacement_cors="$cors_check" \
         -v replacement_rate_table="$rate_limit_table" -v replacement_rate_check="$rate_limit_check" \
-        -v replacement_ip_access="$ip_access_check" '
+        -v replacement_ip_access="$ip_access_check" \
+        -v replacement_alt_svc="$alt_svc_header" '
         /__API_KEY_CHECK__/ { print replacement; next }
         /__CORS_CHECK__/ { print replacement_cors; next }
         /__RATE_LIMIT_TABLE__/ { print replacement_rate_table; next }
         /__RATE_LIMIT_CHECK__/ { print replacement_rate_check; next }
         /__IP_ACCESS_CHECK__/ { print replacement_ip_access; next }
+        /__ALT_SVC_HEADER__/ { print replacement_alt_svc; next }
         { print }
     ' "${HAPROXY_CONFIG}.tmp" > "$HAPROXY_CONFIG"
 
@@ -641,15 +654,15 @@ start_mcp_server() {
 
     case "${PROTOCOL^^}" in
         SHTTP|STREAMABLEHTTP)
-            CMD_ARGS=(npx --yes supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
+            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
             PROTOCOL_DISPLAY="SHTTP/streamableHttp"
             ;;
         SSE)
-            CMD_ARGS=(npx --yes supergateway --port "$INTERNAL_PORT" --ssePath /sse --outputTransport sse --healthEndpoint /healthz --stdio "$serena_cmd")
+            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --ssePath /sse --outputTransport sse --healthEndpoint /healthz --stdio "$serena_cmd")
             PROTOCOL_DISPLAY="SSE/Server-Sent Events"
             ;;
         WS|WEBSOCKET)
-            CMD_ARGS=(npx --yes supergateway --port "$INTERNAL_PORT" --messagePath /message --outputTransport ws --healthEndpoint /healthz --stdio "$serena_cmd")
+            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --messagePath /message --outputTransport ws --healthEndpoint /healthz --stdio "$serena_cmd")
             PROTOCOL_DISPLAY="WS/WebSocket"
             ;;
         STDIO)
@@ -663,7 +676,7 @@ start_mcp_server() {
             ;;
         *)
             echo "Invalid PROTOCOL='${PROTOCOL}', using default ${DEFAULT_PROTOCOL}"
-            CMD_ARGS=(npx --yes supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
+            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
             PROTOCOL_DISPLAY="SHTTP/streamableHttp"
             ;;
     esac

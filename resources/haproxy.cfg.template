@@ -57,6 +57,9 @@ frontend mcp_frontend
     http-response set-header X-Frame-Options "DENY"
     http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains" if { ssl_fc }
 
+    # Advertise HTTP/3 availability on h1/h2 responses (only when h3 listener is active)
+    __ALT_SVC_HEADER__
+
     # Route to backend
     default_backend mcp_backend
 
