@@ -115,7 +115,6 @@ services:
       - serena-cache:/home/serena/.cache
     environment:
       - PORT=9121
-      - INTERNAL_PORT=38011
       - PUID=1000
       - PGID=1000
       - TZ=UTC
@@ -165,7 +164,6 @@ docker run --rm -i \
 | Variable | Default | Description |
 |:---------|:-------:|:------------|
 | `PORT` | `9121` | External server port |
-| `INTERNAL_PORT` | `38011` | Internal MCP server port used by supergateway |
 | `PUID` | `1000` | User ID for file permissions |
 | `PGID` | `1000` | Group ID for file permissions |
 | `TZ` | `UTC` | Container timezone ([TZ database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)) |
