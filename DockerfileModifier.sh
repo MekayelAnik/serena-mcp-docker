@@ -5,8 +5,7 @@ REPO_NAME='serena-mcp'
 BASE_IMAGE=$(cat ./build_data/base-image 2>/dev/null || echo "python:3.13-slim")
 HAPROXY_IMAGE=$(cat ./build_data/haproxy-image 2>/dev/null || echo "haproxy:lts")
 SERENA_VERSION=$(cat ./build_data/version 2>/dev/null || exit 1)
-NVM_VERSION=$(cat ./build_data/nvm_version 2>/dev/null || echo "0.40.4")
-NODE_VERSION=$(cat ./build_data/node_version 2>/dev/null || echo "25.9.0")
+NVM_VERSION=$(cat ./build_data/nvm_version 2>/dev/null || curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+' || echo "0.40.4")
 SERENA_PKG="serena-agent==${SERENA_VERSION}"
 SUPERGATEWAY_PKG='supergateway@latest'
 DOCKERFILE_NAME="Dockerfile.$REPO_NAME"
@@ -62,14 +61,17 @@ RUN mkdir -p /usr/local/sbin && ln -sf /usr/sbin/haproxy /usr/local/sbin/haproxy
     && ln -sf /usr/sbin/gosu /usr/local/bin/su-exec 2>/dev/null || true
 
 # Node.js via NVM (needed by Supergateway stdio->SHTTP bridge)
+# Always installs latest current Node.js — no version pin needed
 ENV NVM_VERSION=${NVM_VERSION}
-ENV NODE_VERSION=${NODE_VERSION}
 ENV NVM_DIR=/root/.nvm
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v\${NVM_VERSION}/install.sh | bash \\
     && . "\$NVM_DIR/nvm.sh" \\
-    && nvm install \${NODE_VERSION} \\
-    && nvm alias default \${NODE_VERSION}
-ENV PATH="\${NVM_DIR}/versions/node/v${NODE_VERSION}/bin:/root/.local/bin:\${PATH}"
+    && nvm install node \\
+    && nvm alias default node \\
+    && ln -sf "\$(which node)" /usr/local/bin/node \\
+    && ln -sf "\$(which npm)" /usr/local/bin/npm \\
+    && ln -sf "\$(which npx)" /usr/local/bin/npx \\
+    && node --version && npm --version
 
 # Install Supergateway (cache mount shares npm cache with previous step)
 RUN --mount=type=cache,target=/root/.npm \\
