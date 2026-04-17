@@ -92,7 +92,7 @@ Multi-architecture images are available — Docker automatically selects the cor
 | CPU | 1 core | 2+ cores |
 | RAM | 512 MB | 1 GB+ |
 | Disk | 500 MB | 1 GB+ |
-| Docker | 20.10+ | Latest |
+| Docker | 23.0+ | Latest |
 | Docker Compose | 2.0+ | Latest |
 
 ---
@@ -521,7 +521,7 @@ Check tag `stable` for production; `<version>` (e.g. `1.1.2`) for pinning.
 
 ### Pre-Flight Checklist
 
-1. Docker version 20.10+ installed
+1. Docker version 23.0+ installed
 2. Sufficient disk space (500MB minimum)
 3. Port not already in use
 4. Project volume mounted correctly
