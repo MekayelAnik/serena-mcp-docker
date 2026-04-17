@@ -4,7 +4,6 @@ ORANGE='\033[38;5;208m'
 BLUE='\033[38;5;12m'
 ERROR_RED='\033[38;5;9m'
 GREEN='\033[38;5;2m'
-SERENA_CYAN='\033[38;5;45m'
 ASH_GRAY='\033[38;5;250m'
 NC='\033[0m'
 
@@ -20,24 +19,25 @@ print_separator() {
 
 # Print ASCII art
 print_ascii_art() {
-    printf "${SERENA_CYAN}   /SSSSSS  /SSSSSSSS /SSSSSSS  /SSSSSSSS /SS   /SS  /SSSSSS                              ${NC}\n"
-    printf "${SERENA_CYAN}  /SS__  SS| SS_____/| SS__  SS| SS_____/| SSS | SS /SS__  SS                              ${NC}\n"
-    printf "${SERENA_CYAN} | SS  \\__/| SS      | SS  \\ SS| SS      | SSSS| SS| SS  \\ SS                              ${NC}\n"
-    printf "${SERENA_CYAN} |  SSSSSS | SSSSS   | SSSSSSS/| SSSSS   | SS SS SS| SSSSSSSS                              ${NC}\n"
-    printf "${SERENA_CYAN}  \\____  SS| SS__/   | SS__  SS| SS__/   | SS  SSSS| SS__  SS                              ${NC}\n"
-    printf "${SERENA_CYAN}  /SS  \\ SS| SS      | SS  \\ SS| SS      | SS\\  SSS| SS  | SS                              ${NC}\n"
-    printf "${SERENA_CYAN} |  SSSSSS/| SSSSSSSS| SS  | SS| SSSSSSSS| SS \\  SS| SS  | SS                              ${NC}\n"
-    printf "${SERENA_CYAN}  \\______/ |________/|__/  |__/|________/|__/  \\__/|__/  |__/                              ${NC}\n"
+    printf "${ORANGE}  /SSSSSS                                                            /SS      /SS  /SSSSSS  /SSSSSSS     ${NC}\n"
+    printf "${ORANGE} /SS__  SS                                                          | SSS    /SSS /SS__  SS| SS__  SS    ${NC}\n"
+    printf "${ORANGE}| SS  \__/  /SSSSSS   /SSSSSS   /SSSSSS  /SSSSSSS   /SSSSSS         | SSSS  /SSSS| SS  \__/| SS  \ SS    ${NC}\n"
+    printf "${ORANGE}|  SSSSSS  /SS__  SS /SS__  SS /SS__  SS| SS__  SS |____  SS /SSSSSS| SS SS/SS SS| SS      | SSSSSSS/    ${NC}\n"
+    printf "${ORANGE} \____  SS| SSSSSSSS| SS  \__/| SSSSSSSS| SS  \ SS  /SSSSSSS|______/| SS  SSS| SS| SS      | SS____/     ${NC}\n"
+    printf "${ORANGE} /SS  \ SS| SS_____/| SS      | SS_____/| SS  | SS /SS__  SS        | SS\  S | SS| SS    SS| SS          ${NC}\n"
+    printf "${ORANGE}|  SSSSSS/|  SSSSSSS| SS      |  SSSSSSS| SS  | SS|  SSSSSSS        | SS \/  | SS|  SSSSSS/| SS          ${NC}\n"
+    printf "${ORANGE} \______/  \_______/|__/       \_______/|__/  |__/ \_______/        |__/     |__/ \______/ |__/          ${NC}\n"                                                                                             
     printf "\n"
-    printf "\n"
-    printf "${SERENA_CYAN}               /SSSSSS  /SSSSSSSS /SSSSSSS  /SS    /SS /SSSSSSSS /SSSSSSS                       ${NC}\n"
-    printf "${SERENA_CYAN}              /SS__  SS| SS_____/| SS__  SS| SS   | SS| SS_____/| SS__  SS                      ${NC}\n"
-    printf "${SERENA_CYAN}             | SS  \\__/| SS      | SS  \\ SS| SS   | SS| SS      | SS  \\ SS                      ${NC}\n"
-    printf "${SERENA_CYAN}             |  SSSSSS | SSSSS   | SSSSSSS/|  SS / SS/| SSSSS   | SSSSSSS/                      ${NC}\n"
-    printf "${SERENA_CYAN}              \\____  SS| SS__/   | SS__  SS \\  SS SS/ | SS__/   | SS__  SS                      ${NC}\n"
-    printf "${SERENA_CYAN}              /SS  \\ SS| SS      | SS  \\_SS  \\  SSS/  | SS      | SS  \\_SS                      ${NC}\n"
-    printf "${SERENA_CYAN}             |  SSSSSS/| SSSSSSSS| SS  | SS   \\  S/   | SSSSSSSS| SS  | SS                      ${NC}\n"
-    printf "${SERENA_CYAN}              \\______/ |________/|__/  |__/    \\_/    |________/|__/  |__/                      ${NC}\n"
+    printf "\n"                                                                                                            
+    printf "${ORANGE}  /SSSSSS                                                                                                ${NC}\n"
+    printf "${ORANGE} /SS__  SS                                                                                               ${NC}\n"
+    printf "${ORANGE}| SS  \__/  /SSSSSS   /SSSSSS  /SS    /SS /SSSSSS   /SSSSSS                                              ${NC}\n"
+    printf "${ORANGE}|  SSSSSS  /SS__  SS /SS__  SS|  SS  /SS//SS__  SS /SS__  SS                                             ${NC}\n"
+    printf "${ORANGE} \____  SS| SSSSSSSS| SS  \__/ \  SS/SS/| SSSSSSSS| SS  \__/                                             ${NC}\n"
+    printf "${ORANGE} /SS  \ SS| SS_____/| SS        \  SSS/ | SS_____/| SS                                                   ${NC}\n"
+    printf "${ORANGE}|  SSSSSS/|  SSSSSSS| SS         \  S/  |  SSSSSSS| SS                                                   ${NC}\n"
+    printf "${ORANGE} \______/  \_______/|__/          \_/    \_______/|__/                                                   ${NC}\n"
+                                                         
     printf "\n"
 }
 
