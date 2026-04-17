@@ -13,7 +13,9 @@
   <a href="https://github.com/MekayelAnik/serena-mcp-docker/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/MekayelAnik/serena-mcp-docker?style=flat-square"></a>
 </p>
 
-## Multi-Architecture Docker Image for LSP-Backed Semantic Code Intelligence
+## Unofficial Multi-Architecture Docker Image for LSP-Backed Semantic Code Intelligence
+
+> **Note:** This is an **unofficial** community-maintained Docker image. It is not affiliated with or endorsed by [Oraios GmbH](https://github.com/oraios/serena), the creators of Serena.
 
 ## Table of Contents
 
