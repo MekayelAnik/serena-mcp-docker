@@ -292,6 +292,8 @@ jobs:
           echo "$HAPROXY_IMG" > ./build_data/haproxy-image
 
           echo "${{ matrix.version }}" > ./build_data/version
+          echo "0.40.4" > ./build_data/nvm_version
+          echo "25.9.0" > ./build_data/node_version
           touch ./build_data/build
           bash ./DockerfileModifier.sh
           test -f ./Dockerfile.serena-mcp

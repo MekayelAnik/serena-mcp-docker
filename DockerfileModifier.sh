@@ -6,7 +6,7 @@ BASE_IMAGE=$(cat ./build_data/base-image 2>/dev/null || echo "python:3.13-slim")
 HAPROXY_IMAGE=$(cat ./build_data/haproxy-image 2>/dev/null || echo "haproxy:lts")
 SERENA_VERSION=$(cat ./build_data/version 2>/dev/null || exit 1)
 NVM_VERSION=$(cat ./build_data/nvm_version 2>/dev/null || echo "0.40.4")
-NODE_VERSION=$(cat ./build_data/node_version 2>/dev/null || echo "22.18.0")
+NODE_VERSION=$(cat ./build_data/node_version 2>/dev/null || echo "25.9.0")
 SERENA_PKG="serena-agent==${SERENA_VERSION}"
 SUPERGATEWAY_PKG='supergateway@latest'
 DOCKERFILE_NAME="Dockerfile.$REPO_NAME"
