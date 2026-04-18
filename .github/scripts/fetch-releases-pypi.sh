@@ -16,15 +16,27 @@ fi
 DATE_TAG="$(date +%d%m%Y)"
 echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 
+# Stable = PEP 440 final release: N(.N)* with optional epoch (e.g. 1!2.3).
+# Rejects pre-release (aN/bN/rcN/alphaN/betaN), dev (.devN), post (.postN),
+# and local versions (+local).
+STABLE_REGEX='^([0-9]+!)?[0-9]+(\.[0-9]+)*$'
+
 # Handle manual version input
 if [[ -n "$MANUAL_VERSIONS_RAW" && "$REQUESTED_ACTION" == "build-versions" ]]; then
     IFS=',' read -ra MANUAL_ARRAY <<< "$MANUAL_VERSIONS_RAW"
     VERSIONS_OLDEST=""
+    SKIPPED_MANUAL=""
     for v in "${MANUAL_ARRAY[@]}"; do
         clean="$(echo "$v" | xargs)"
-        [[ -n "$clean" ]] && VERSIONS_OLDEST="${VERSIONS_OLDEST:+$VERSIONS_OLDEST
+        [[ -z "$clean" ]] && continue
+        if [[ "$clean" =~ $STABLE_REGEX ]]; then
+            VERSIONS_OLDEST="${VERSIONS_OLDEST:+$VERSIONS_OLDEST
 }$clean"
+        else
+            SKIPPED_MANUAL="${SKIPPED_MANUAL:+$SKIPPED_MANUAL, }$clean"
+        fi
     done
+    [[ -n "$SKIPPED_MANUAL" ]] && echo "Skipped non-stable manual versions: $SKIPPED_MANUAL" >&2
 
     if [[ -z "$VERSIONS_OLDEST" ]]; then
         echo "versions_json=[]" >> "$GITHUB_OUTPUT"
@@ -40,10 +52,10 @@ else
     PYPI_URL="${PYPI_REGISTRY}/pypi/${PYPI_PACKAGE}/json"
     curl -fsSL "$PYPI_URL" -o pypi-package.json
 
-    # Extract versions, filter out pre-releases (alpha, beta, rc, dev)
+    # Extract versions, keep only stable (PEP 440 final releases)
     VERSIONS_NEWEST="$({
         jq -r '.releases | keys[]' pypi-package.json \
-            | grep -Evi '(a|b|rc|dev|alpha|beta|pre|post)' \
+            | grep -E "$STABLE_REGEX" \
             | sort -Vr \
             | head -n "$MAX_VERSIONS"
     } || true)"

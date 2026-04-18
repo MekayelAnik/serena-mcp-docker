@@ -115,10 +115,15 @@ jobs:
             exit 0
           fi
 
-          # Check current PyPI latest version
-          CURRENT_PYPI_LATEST="$(curl -fsSL "${PYPI_REGISTRY}/pypi/${PYPI_PACKAGE}/json" | jq -r '.info.version // ""' 2>/dev/null || echo "")"
+          # Check current PyPI latest STABLE version (PEP 440 final releases only)
+          PYPI_JSON="$(curl -fsSL "${PYPI_REGISTRY}/pypi/${PYPI_PACKAGE}/json" 2>/dev/null || echo "")"
+          CURRENT_PYPI_LATEST="$(echo "$PYPI_JSON" \
+            | jq -r '.releases | keys[]' 2>/dev/null \
+            | grep -E '^([0-9]+!)?[0-9]+(\.[0-9]+)*$' \
+            | sort -Vr \
+            | head -n1 || echo "")"
           if [[ -z "$CURRENT_PYPI_LATEST" ]]; then
-            echo "Could not fetch PyPI latest — running pipeline as fallback"
+            echo "Could not fetch PyPI stable latest — running pipeline as fallback"
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
