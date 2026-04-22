@@ -22,7 +22,7 @@ echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 STABLE_REGEX='^([0-9]+!)?[0-9]+(\.[0-9]+)*$'
 
 # Handle manual version input
-if [[ -n "$MANUAL_VERSIONS_RAW" && "$REQUESTED_ACTION" == "build-versions" ]]; then
+if [[ -n "$MANUAL_VERSIONS_RAW" && "$REQUESTED_ACTION" == "build" ]]; then
     IFS=',' read -ra MANUAL_ARRAY <<< "$MANUAL_VERSIONS_RAW"
     VERSIONS_OLDEST=""
     SKIPPED_MANUAL=""
