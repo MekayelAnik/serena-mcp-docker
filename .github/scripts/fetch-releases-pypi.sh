@@ -22,14 +22,65 @@ echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 STABLE_REGEX='^([0-9]+!)?[0-9]+(\.[0-9]+)*$'
 
 # Handle manual version input
+# Accepts comma-separated list (1.4.5,1.5.3), inclusive range (1.0.0-1.5.3),
+# or any mix (1.0.0,1.2.0-1.4.0,1.5.3). Ranges are expanded against the live
+# PyPI release list, filtered to stable versions, and inclusive on both ends.
+# Non-stable single tokens are still skipped via STABLE_REGEX.
 if [[ -n "$MANUAL_VERSIONS_RAW" && "$REQUESTED_ACTION" == "build" ]]; then
     IFS=',' read -ra MANUAL_ARRAY <<< "$MANUAL_VERSIONS_RAW"
+
+    PYPI_ALL_STABLE=""
+    fetch_pypi_stable() {
+        if [[ -z "$PYPI_ALL_STABLE" ]]; then
+            local url="${PYPI_REGISTRY}/pypi/${PYPI_PACKAGE}/json"
+            PYPI_ALL_STABLE="$(curl -fsSL "$url" \
+                | jq -r '.releases | keys[]' \
+                | grep -Evi '(a|b|rc|dev|alpha|beta|pre|post)' \
+                | sort -V)"
+            if [[ -z "$PYPI_ALL_STABLE" ]]; then
+                echo "Failed to fetch PyPI release list for range expansion" >&2
+                exit 1
+            fi
+        fi
+    }
+
     VERSIONS_OLDEST=""
     SKIPPED_MANUAL=""
     for v in "${MANUAL_ARRAY[@]}"; do
         clean="$(echo "$v" | xargs)"
         [[ -z "$clean" ]] && continue
-        if [[ "$clean" =~ $STABLE_REGEX ]]; then
+
+        if [[ "$clean" =~ ^([0-9]+(\.[0-9]+)*)-([0-9]+(\.[0-9]+)*)$ ]]; then
+            range_lo="${BASH_REMATCH[1]}"
+            range_hi="${BASH_REMATCH[3]}"
+            if [[ "$(printf '%s\n%s\n' "$range_lo" "$range_hi" | sort -V | head -n1)" != "$range_lo" ]]; then
+                echo "Invalid range '$clean': lower bound must be <= upper bound" >&2
+                exit 1
+            fi
+            fetch_pypi_stable
+            expanded="$(echo "$PYPI_ALL_STABLE" | awk -v lo="$range_lo" -v hi="$range_hi" '
+                function vlte(a, b,   na, nb, i, ai, bi) {
+                    na = split(a, ai, ".")
+                    nb = split(b, bi, ".")
+                    for (i = 1; i <= (na > nb ? na : nb); i++) {
+                        x = (i <= na) ? ai[i] + 0 : 0
+                        y = (i <= nb) ? bi[i] + 0 : 0
+                        if (x < y) return 1
+                        if (x > y) return 0
+                    }
+                    return 1
+                }
+                { if (vlte(lo, $0) && vlte($0, hi)) print }
+            ')"
+            if [[ -z "$expanded" ]]; then
+                echo "Range '$clean' matched no stable PyPI versions" >&2
+                exit 1
+            fi
+            while IFS= read -r ev; do
+                [[ -n "$ev" ]] && VERSIONS_OLDEST="${VERSIONS_OLDEST:+$VERSIONS_OLDEST
+}$ev"
+            done <<< "$expanded"
+        elif [[ "$clean" =~ $STABLE_REGEX ]]; then
             VERSIONS_OLDEST="${VERSIONS_OLDEST:+$VERSIONS_OLDEST
 }$clean"
         else
@@ -37,6 +88,9 @@ if [[ -n "$MANUAL_VERSIONS_RAW" && "$REQUESTED_ACTION" == "build" ]]; then
         fi
     done
     [[ -n "$SKIPPED_MANUAL" ]] && echo "Skipped non-stable manual versions: $SKIPPED_MANUAL" >&2
+
+    # Dedupe expanded ranges while preserving newest-first ordering downstream
+    VERSIONS_OLDEST="$(echo "$VERSIONS_OLDEST" | awk 'NF && !seen[$0]++')"
 
     if [[ -z "$VERSIONS_OLDEST" ]]; then
         echo "versions_json=[]" >> "$GITHUB_OUTPUT"
