@@ -5,9 +5,12 @@ REPO_NAME='serena-mcp'
 BASE_IMAGE=$(cat ./build_data/base-image 2>/dev/null || echo "python:3.13-slim")
 HAPROXY_IMAGE=$(cat ./build_data/haproxy-image 2>/dev/null || echo "haproxy:lts")
 SERENA_VERSION=$(cat ./build_data/version 2>/dev/null || exit 1)
-NVM_VERSION=$(cat ./build_data/nvm_version 2>/dev/null || curl -fsSL https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+' || echo "0.40.4")
 SERENA_PKG="serena-agent==${SERENA_VERSION}"
-SUPERGATEWAY_PKG='supergateway@latest'
+# mcp-proxy: stdio<->StreamableHTTP/SSE bridge. Replaces supergateway.
+# Stateful by default (one stdio child per Mcp-Session-Id, reused across
+# requests) — avoids the spawn-per-request memory leak that affected
+# supergateway in stateless mode (supercorp-ai/supergateway#108).
+MCP_PROXY_PKG=$(cat ./build_data/mcp_proxy_version 2>/dev/null || echo "mcp-proxy")
 DOCKERFILE_NAME="Dockerfile.$REPO_NAME"
 
 # Create a temporary file safely
@@ -35,7 +38,7 @@ FROM $BASE_IMAGE AS build
 
 # Author info:
 LABEL org.opencontainers.image.authors="MOHAMMAD MEKAYEL ANIK <mekayel.anik@gmail.com>"
-LABEL org.opencontainers.image.description="Serena MCP Server — LSP-backed semantic code intelligence with Supergateway"
+LABEL org.opencontainers.image.description="Serena MCP Server — LSP-backed semantic code intelligence with mcp-proxy (stdio<->StreamableHTTP/SSE bridge)"
 LABEL org.opencontainers.image.source="https://github.com/MekayelAnik/serena-mcp-docker"
 LABEL org.opencontainers.image.licenses="GPL-3.0-only"
 
@@ -43,7 +46,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Copy the entrypoint script into the container and make it executable
 COPY ./resources/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/banner.sh /usr/local/bin/node.sh \\
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/banner.sh \\
     && if [ -f /usr/local/bin/build-timestamp.txt ]; then chmod +r /usr/local/bin/build-timestamp.txt; fi \\
     && mkdir -p /etc/haproxy \\
     && mv -vf /usr/local/bin/haproxy.cfg.template /etc/haproxy/haproxy.cfg.template \\
@@ -60,36 +63,14 @@ COPY --from=haproxy-src /usr/local/sbin/haproxy /usr/sbin/haproxy
 RUN mkdir -p /usr/local/sbin && ln -sf /usr/sbin/haproxy /usr/local/sbin/haproxy \\
     && ln -sf /usr/sbin/gosu /usr/local/bin/su-exec 2>/dev/null || true
 
-# Node.js via NVM (needed by Supergateway stdio->SHTTP bridge)
-# Installed under /opt/nvm so the non-root 'serena' runtime user can
-# traverse into it. /root stays 0700 (default Debian behavior).
-ENV NVM_VERSION=${NVM_VERSION}
-ENV NVM_DIR=/opt/nvm
-RUN mkdir -p /opt/nvm && chmod 755 /opt /opt/nvm \\
-    && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v\${NVM_VERSION}/install.sh | bash \\
-    && . "\$NVM_DIR/nvm.sh" \\
-    && nvm install node \\
-    && nvm alias default node \\
-    && ln -sf "\$(which node)" /usr/local/bin/node \\
-    && ln -sf "\$(which npm)" /usr/local/bin/npm \\
-    && ln -sf "\$(which npx)" /usr/local/bin/npx \\
-    && node --version && npm --version
-
-# Install Supergateway (cache mount shares npm cache with previous step)
-# Symlink the binary into /usr/local/bin so the runtime can call it
-# directly without the npx resolver step.
-RUN --mount=type=cache,target=/root/.npm \\
-    echo "Installing Supergateway..." && \\
-    npm install -g ${SUPERGATEWAY_PKG} --omit=dev --no-audit --no-fund --loglevel error && \\
-    ln -sf "\$(. \$NVM_DIR/nvm.sh && which supergateway)" /usr/local/bin/supergateway && \\
-    rm -rf /tmp/* /var/tmp/* && \\
-    rm -rf /usr/local/lib/node_modules/npm/man /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/html
-
-# Install Serena from PyPI (pyright already bundled in deps)
+# Install Serena + mcp-proxy from PyPI in one layer (shared pip cache).
+# mcp-proxy is a Python tool, so we no longer need Node.js / NVM — image
+# shrinks by ~175 MB vs the previous supergateway-based build.
 RUN --mount=type=cache,target=/root/.cache/pip \\
-    echo "Installing package: ${SERENA_PKG}" && \\
-    pip install --no-cache-dir --break-system-packages ${SERENA_PKG} && \\
-    echo "Package installed successfully"
+    echo "Installing packages: ${SERENA_PKG} + ${MCP_PROXY_PKG}" && \\
+    pip install --no-cache-dir --break-system-packages ${SERENA_PKG} ${MCP_PROXY_PKG} && \\
+    echo "Packages installed successfully" && \\
+    mcp-proxy --version || true
 
 # Seed default Serena config (non-interactive dashboard)
 ENV SERENA_HOME=/config/serena

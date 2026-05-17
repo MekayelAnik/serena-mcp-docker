@@ -23,6 +23,16 @@ services:
       - SERENA_PORT=9121
       - SERENA_MODES=
       - SERENA_LOG_LEVEL=INFO
+      # mcp-proxy session model. Stateful by default — one stdio child per
+      # Mcp-Session-Id, reused across requests. Sessions persist until the
+      # client explicitly closes them (no server-side TTL). Set to true only
+      # if full per-request isolation is required (memory-hostile).
+      - MCP_PROXY_STATELESS=false
+      # Cap virtual memory of each Serena stdio child (MiB; 0 disables)
+      - SERENA_MAX_MEM_MB=4096
+      # HAProxy concurrency caps (0 disables)
+      - HAPROXY_FRONTEND_MAXCONN=64
+      - HAPROXY_SERVER_MAXCONN=16
       # System
       - PUID=1000
       - PGID=1000

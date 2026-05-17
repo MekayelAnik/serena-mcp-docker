@@ -563,6 +563,22 @@ generate_haproxy_config() {
     escaped_bind_params="$(escape_sed_replacement "$BIND_PARAMS")"
     escaped_quic_bind_line="$(escape_sed_replacement "$QUIC_BIND_LINE")"
 
+    # Concurrency caps. Bound HAProxy-level acceptance so a burst cannot
+    # saturate the upstream stdio bridge or trigger unbounded child spawns
+    # in stateless modes. Empty = no cap.
+    local frontend_maxconn_clause=""
+    local server_maxconn_clause=""
+    if [[ "${HAPROXY_FRONTEND_MAXCONN:-0}" =~ ^[1-9][0-9]*$ ]]; then
+        frontend_maxconn_clause="maxconn ${HAPROXY_FRONTEND_MAXCONN}"
+    fi
+    if [[ "${HAPROXY_SERVER_MAXCONN:-0}" =~ ^[1-9][0-9]*$ ]]; then
+        server_maxconn_clause="maxconn ${HAPROXY_SERVER_MAXCONN}"
+    fi
+    local escaped_frontend_maxconn
+    local escaped_server_maxconn
+    escaped_frontend_maxconn="$(escape_sed_replacement "$frontend_maxconn_clause")"
+    escaped_server_maxconn="$(escape_sed_replacement "$server_maxconn_clause")"
+
     # Alt-Svc header: when the QUIC/h3 listener is active, advertise h3 on
     # h1/h2 responses so clients can upgrade. Only emitted on TLS responses
     # and only when the current frontend protocol is not itself h3 (to avoid
@@ -581,6 +597,8 @@ generate_haproxy_config() {
         -e "s|__SERVER_NAME__|${HAPROXY_SERVER_NAME}|g" \
         -e "s|__CORS_PREFLIGHT_CONDITION__|${cors_preflight_condition}|g" \
         -e "s|__CORS_RESPONSE_CONDITION__|${cors_response_condition}|g" \
+        -e "s|__FRONTEND_MAXCONN__|${escaped_frontend_maxconn}|g" \
+        -e "s|__SERVER_MAXCONN__|${escaped_server_maxconn}|g" \
         "$HAPROXY_TEMPLATE" > "${HAPROXY_CONFIG}.tmp"
 
     awk -v replacement="$api_key_check" -v replacement_cors="$cors_check" \
@@ -644,29 +662,67 @@ start_mcp_server() {
     SERENA_MODES="${SERENA_MODES:-}"
     SERENA_LOG_LEVEL="${SERENA_LOG_LEVEL:-INFO}"
 
+    # mcp-proxy session model: stateful by default — one stdio child per
+    # Mcp-Session-Id, reused across requests. Set MCP_PROXY_STATELESS=true
+    # only when full per-request isolation is required (memory-hostile).
+    MCP_PROXY_STATELESS="${MCP_PROXY_STATELESS:-false}"
+    # Cap virtual memory of each stdio child (0 = disabled).
+    SERENA_MAX_MEM_MB="${SERENA_MAX_MEM_MB:-0}"
+
     build_serena_cmd
 
-    # Build the full serena command string for supergateway stdio bridge
-    local serena_cmd="serena ${SERENA_ARGS[*]}"
+    # mcp-proxy receives the stdio command as positional args after `--`,
+    # so prlimit can prefix the argv list directly.
+    local serena_argv=(serena "${SERENA_ARGS[@]}")
+    if [[ "${SERENA_MAX_MEM_MB}" =~ ^[1-9][0-9]*$ ]] && command -v prlimit >/dev/null 2>&1; then
+        local mem_bytes=$((SERENA_MAX_MEM_MB * 1024 * 1024))
+        serena_argv=(prlimit "--as=${mem_bytes}" -- "${serena_argv[@]}")
+        echo "Serena child memory cap: ${SERENA_MAX_MEM_MB} MiB (prlimit --as)"
+    fi
 
     # Change to project dir
     cd "${SERENA_PROJECT:-/data}" 2>/dev/null || cd /
 
+    # Build mcp-proxy CORS args. CORS env may be comma-separated origins or "*".
+    local cors_args=()
+    if [[ -n "${CORS:-}" ]]; then
+        local origin
+        for origin in ${CORS//,/ }; do
+            cors_args+=(--allow-origin "$origin")
+        done
+    fi
+    cors_args+=(--expose-header Mcp-Session-Id)
+
+    local stateless_args=()
+    if [[ "${MCP_PROXY_STATELESS,,}" == "true" ]]; then
+        stateless_args+=(--stateless)
+    else
+        stateless_args+=(--no-stateless)
+    fi
+
+    local mode_tag="stateful"
+    [[ "${MCP_PROXY_STATELESS,,}" == "true" ]] && mode_tag="stateless"
+
     case "${PROTOCOL^^}" in
-        SHTTP|STREAMABLEHTTP)
-            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
-            PROTOCOL_DISPLAY="SHTTP/streamableHttp"
-            ;;
-        SSE)
-            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --ssePath /sse --outputTransport sse --healthEndpoint /healthz --stdio "$serena_cmd")
-            PROTOCOL_DISPLAY="SSE/Server-Sent Events"
+        SHTTP|STREAMABLEHTTP|SSE)
+            # mcp-proxy exposes both /mcp (StreamableHTTP) and /sse simultaneously.
+            CMD_ARGS=(mcp-proxy
+                --host 127.0.0.1
+                --port "$INTERNAL_PORT"
+                --pass-environment
+                "${stateless_args[@]}"
+                "${cors_args[@]}"
+                --
+                "${serena_argv[@]}")
+            PROTOCOL_DISPLAY="mcp-proxy: /mcp (StreamableHTTP) + /sse (${mode_tag})"
             ;;
         WS|WEBSOCKET)
-            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --messagePath /message --outputTransport ws --healthEndpoint /healthz --stdio "$serena_cmd")
-            PROTOCOL_DISPLAY="WS/WebSocket"
+            echo "ERROR: WebSocket transport is not supported by mcp-proxy." >&2
+            echo "       Use PROTOCOL=SHTTP or PROTOCOL=SSE instead." >&2
+            exit 1
             ;;
         STDIO)
-            # Pure stdio mode — no HAProxy, no Supergateway
+            # Pure stdio mode — bypass HAProxy and mcp-proxy entirely
             echo "Launching Serena MCP in pure stdio mode"
             if [ "$(id -u)" -eq 0 ] && id -u serena >/dev/null 2>&1; then
                 exec gosu serena serena "${SERENA_ARGS[@]}" "$@"
@@ -676,8 +732,15 @@ start_mcp_server() {
             ;;
         *)
             echo "Invalid PROTOCOL='${PROTOCOL}', using default ${DEFAULT_PROTOCOL}"
-            CMD_ARGS=(supergateway --port "$INTERNAL_PORT" --streamableHttpPath /mcp --outputTransport streamableHttp --healthEndpoint /healthz --stdio "$serena_cmd")
-            PROTOCOL_DISPLAY="SHTTP/streamableHttp"
+            CMD_ARGS=(mcp-proxy
+                --host 127.0.0.1
+                --port "$INTERNAL_PORT"
+                --pass-environment
+                "${stateless_args[@]}"
+                "${cors_args[@]}"
+                --
+                "${serena_argv[@]}")
+            PROTOCOL_DISPLAY="mcp-proxy: /mcp (StreamableHTTP) + /sse (${mode_tag})"
             ;;
     esac
 
