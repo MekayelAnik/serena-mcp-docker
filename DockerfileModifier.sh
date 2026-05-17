@@ -2,7 +2,7 @@
 set -euxo pipefail
 # Set variables first
 REPO_NAME='serena-mcp'
-BASE_IMAGE=$(cat ./build_data/base-image 2>/dev/null || echo "python:3.13-slim")
+BASE_IMAGE=$(cat ./build_data/base-image 2>/dev/null || echo "python:3.14-slim")
 HAPROXY_IMAGE=$(cat ./build_data/haproxy-image 2>/dev/null || echo "haproxy:lts")
 SERENA_VERSION=$(cat ./build_data/version 2>/dev/null || exit 1)
 SERENA_PKG="serena-agent==${SERENA_VERSION}"
