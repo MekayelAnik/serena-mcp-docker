@@ -92,8 +92,13 @@ ARG API_KEY=""
 ENV PORT=\${PORT}
 ENV API_KEY=\${API_KEY}
 
-# L7 health check: auto-detects HTTP/HTTPS via ENABLE_HTTPS env var
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \\
+# L7 health check: auto-detects HTTP/HTTPS via ENABLE_HTTPS env var.
+# /healthz is answered by HAProxy locally (mcp-proxy lacks a configurable
+# health endpoint) so the check itself returns in well under a second.
+# start-period=60s tolerates the cold-start LSP boot (pyright workspace
+# analysis can take 5-30s on real projects) so orchestrators do not flap
+# the container before the backend is ready.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
     CMD sh -c 'wget -q --spider --no-check-certificate \$([ "\$ENABLE_HTTPS" = "true" ] && echo https || echo http)://127.0.0.1:\${PORT:-9121}/healthz'
 
 VOLUME ["/data", "/config"]

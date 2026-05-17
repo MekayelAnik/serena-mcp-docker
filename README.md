@@ -228,6 +228,43 @@ docker run --rm -i \
 - `IP_ALLOWLIST` and `IP_BLOCKLIST` accept comma-separated IPs or CIDR ranges
 - When both are set, blocklist is checked first, then allowlist
 
+### Recommended Per-Project Config (`.serena/config.toml`)
+
+Serena indexes and caches per-project. Default LSP settings can grow the cache to GiB scale on TypeScript / JavaScript projects, because the bundled language server indexes `node_modules` (see upstream [oraios/serena#944](https://github.com/oraios/serena/issues/944)). Drop the following file at `<project>/.serena/config.toml` before first run to keep the footprint bounded:
+
+```toml
+[indexing]
+exclude_patterns = [
+  "**/node_modules/**",
+  "**/.next/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/.venv/**",
+  "**/__pycache__/**",
+  "**/.git/**",
+  "**/coverage/**",
+  "**/target/**",
+  "**/.serena/cache/**",
+]
+
+[cache]
+max_size_mb = 200
+prune_after_days = 3
+max_memory_mb = 1024
+
+[language_servers.typescript]
+# Single most impactful line for TS/JS repos — keeps the TS LSP from
+# indexing node_modules and library declaration files.
+exclude_libs = true
+max_memory_mb = 1024
+worker_threads = 2
+
+[language_servers.python]
+max_memory_mb = 512
+```
+
+This file is per-project (lives inside the mounted volume), so it cannot be baked into the image. Clear any stale cache with `rm -rf <project>/.serena/cache/` after changing the limits.
+
 ### Memory & Concurrency Tuning
 
 `mcp-proxy` runs the Serena backend as a single long-lived stdio child and multiplexes all client sessions through it via JSON-RPC ids. This caps the *expected* memory footprint; the knobs below cap the *worst case*:

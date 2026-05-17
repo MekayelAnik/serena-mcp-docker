@@ -14,6 +14,11 @@ services:
       - PORT=9121
       - INTERNAL_PORT=38011
       - PROTOCOL=SHTTP
+      # ENABLE_HTTPS=false is plaintext over the wire. Safe ONLY for
+      # loopback / trusted internal networks. Set to "true" for any
+      # public, multi-host, or untrusted deployment — HAProxy auto-
+      # generates a self-signed cert if none is mounted under
+      # /etc/haproxy/certs/.
       - ENABLE_HTTPS=false
       - HTTP_VERSION_MODE=auto
       # Serena core
@@ -22,6 +27,8 @@ services:
       - SERENA_TRANSPORT=stdio
       - SERENA_PORT=9121
       - SERENA_MODES=
+      # INFO logs every tool call + LSP message. Switch to WARNING for
+      # quieter long-running / production deployments.
       - SERENA_LOG_LEVEL=INFO
       # mcp-proxy session model. Stateful by default — one stdio child per
       # Mcp-Session-Id, reused across requests. Sessions persist until the
