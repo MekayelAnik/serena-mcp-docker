@@ -49,17 +49,20 @@
 
 Serena is an LSP-backed MCP providing 30+ tools for semantic code intelligence across 30+ languages (Python, TypeScript, Rust, Go, Java, C/C++, Ruby, PHP, Kotlin, and more). Fills gaps where tree-sitter-based code-graph tools (like CodeGraphContext, GitNexus, Narsil) stop: real symbol resolution via language servers, cross-file rename, symbol-aware edits.
 
-This Docker image wraps [serena-agent](https://pypi.org/project/serena-agent/) with Supergateway for HTTP/SSE/WebSocket transport and HAProxy for TLS, rate limiting, API key auth, and CORS — matching the transport layer used by all other MCP images in this ecosystem.
+This Docker image wraps [serena-agent](https://pypi.org/project/serena-agent/) with [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) for HTTP/SSE transport and HAProxy for TLS, rate limiting, API key auth, and CORS — matching the transport layer used by all other MCP images in this ecosystem.
+
+> **Stdio bridge update (May 2026):** the image now ships with `mcp-proxy` instead of `supergateway`. The new bridge is **stateful by default** and multiplexes all client sessions through a single backend stdio child via JSON-RPC IDs (no spawn-per-session), which eliminates a class of memory leaks observed with `supergateway` in stateless `streamableHttp` mode ([supercorp-ai/supergateway#108](https://github.com/supercorp-ai/supergateway/issues/108)). Empirical measurement on this image: **4.6× lower total RSS** (1247 MiB → 268 MiB) under bursty unreused-session traffic. The Node.js runtime is no longer required.
 
 ### Key Features
 
 - **Multi-Architecture Support** - Native support for x86-64 and ARM64
 - **LSP-Backed Intelligence** - Real symbol resolution via pyright, gopls, rust-analyzer, and more
-- **Multiple Transport Protocols** - SHTTP, SSE, WebSocket, and pure stdio support
+- **Modern Transport Layer** - SHTTP (Streamable HTTP), SSE, and pure stdio via `mcp-proxy` (stateful by default, single-backend multiplex)
 - **Secure by Design** - HAProxy with TLS, API key auth, rate limiting, IP allowlist/blocklist, CORS
 - **Context-Aware** - Adapts tool exposure per MCP client (Claude Code, Cursor, VS Code, ChatGPT, etc.)
 - **Production Ready** - Stable releases with comprehensive CI/CD and multi-registry publishing
 - **Easy Configuration** - Simple environment variable setup
+- **Predictable Memory** - `prlimit` per-child cap and HAProxy concurrency caps prevent runaway LSPs from OOM-ing the host
 
 ---
 
@@ -125,6 +128,15 @@ services:
       - SERENA_LOG_LEVEL=INFO
       - ENABLE_HTTPS=false
       - HTTP_VERSION_MODE=auto
+      # mcp-proxy session model. Stateful by default — one stdio child shared
+      # across all sessions (multiplexed via JSON-RPC ids). Set to "true" only
+      # if full per-request isolation is required (memory-hostile).
+      - MCP_PROXY_STATELESS=false
+      # Cap virtual memory of the Serena stdio child (MiB; 0 disables)
+      - SERENA_MAX_MEM_MB=4096
+      # HAProxy concurrency caps (0 disables) — bound burst-spawn risk
+      - HAPROXY_FRONTEND_MAXCONN=64
+      - HAPROXY_SERVER_MAXCONN=16
       # Optional: require Bearer token auth at HAProxy layer
       # - API_KEY=replace-with-strong-secret
       # Optional: CORS origins
@@ -150,10 +162,11 @@ docker run --rm -i \
 
 | Protocol | Endpoint | Description |
 |:---------|:---------|:------------|
-| SHTTP | `http://host-ip:9121/mcp` | Streamable HTTP (default) |
-| SSE | `http://host-ip:9121/sse` | Server-Sent Events |
-| WebSocket | `ws://host-ip:9121/message` | WebSocket |
-| Health | `http://host-ip:9121/healthz` | Health check endpoint |
+| SHTTP | `http://host-ip:9121/mcp` | Streamable HTTP (default; exposed simultaneously) |
+| SSE | `http://host-ip:9121/sse` | Server-Sent Events (exposed simultaneously) |
+| Health | `http://host-ip:9121/healthz` | Health check (answered by HAProxy, sub-millisecond) |
+
+> WebSocket transport was dropped in the migration to `mcp-proxy`. Setting `PROTOCOL=WS` will now fail at startup with a clear message. Use `SHTTP` or `SSE` instead.
 
 ---
 
@@ -167,13 +180,17 @@ docker run --rm -i \
 | `PUID` | `1000` | User ID for file permissions |
 | `PGID` | `1000` | Group ID for file permissions |
 | `TZ` | `UTC` | Container timezone ([TZ database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)) |
-| `PROTOCOL` | `SHTTP` | Transport protocol (`SHTTP`, `SSE`, `WS`, `STDIO`) |
+| `PROTOCOL` | `SHTTP` | Transport protocol (`SHTTP`, `SSE`, `STDIO`). `WS` is no longer supported. |
 | `SERENA_PROJECT` | `/data` | Project path (mapped to `--project`) |
 | `SERENA_CONTEXT` | `desktop-app` | Client context (see [Context Selection](#context-selection)) |
 | `SERENA_TRANSPORT` | `stdio` | Serena transport (`stdio`, `sse`, `streamable-http`) |
 | `SERENA_PORT` | `9121` | Serena port when transport != stdio |
 | `SERENA_MODES` | *(empty)* | Comma-separated modes fed to `--mode` |
 | `SERENA_LOG_LEVEL` | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `MCP_PROXY_STATELESS` | `false` | When `true`, mcp-proxy disables `Mcp-Session-Id` issuance on `/mcp` (per-request isolation). Default `false` = stateful, single backend reused across all sessions. |
+| `SERENA_MAX_MEM_MB` | `0` | Cap virtual memory of the Serena stdio child via `prlimit --as` (MiB). `0` disables the cap. |
+| `HAPROXY_FRONTEND_MAXCONN` | `0` | HAProxy frontend `maxconn`. Bounds total concurrent connections accepted. `0` disables. |
+| `HAPROXY_SERVER_MAXCONN` | `0` | HAProxy backend server `maxconn`. Bounds in-flight requests to the upstream `mcp-proxy`. `0` disables. |
 | `API_KEY` | *(empty)* | Enables Bearer token auth (`Authorization: Bearer <API_KEY>`) |
 | `CORS` | *(empty)* | Comma-separated CORS origins, supports `*` |
 | `ENABLE_HTTPS` | `false` | Enables TLS termination in HAProxy |
@@ -210,6 +227,15 @@ docker run --rm -i \
 - `MAX_CONNECTIONS_PER_IP` limits concurrent connections (useful for preventing abuse)
 - `IP_ALLOWLIST` and `IP_BLOCKLIST` accept comma-separated IPs or CIDR ranges
 - When both are set, blocklist is checked first, then allowlist
+
+### Memory & Concurrency Tuning
+
+`mcp-proxy` runs the Serena backend as a single long-lived stdio child and multiplexes all client sessions through it via JSON-RPC ids. This caps the *expected* memory footprint; the knobs below cap the *worst case*:
+
+- `MCP_PROXY_STATELESS=false` (default) — share one backend child across all sessions. Recommended for almost every deployment. Flip to `true` only when you genuinely need per-request isolation (and accept the per-request transport-instance cost).
+- `SERENA_MAX_MEM_MB=4096` — caps the virtual-memory size of the Serena child via `prlimit --as`. A runaway LSP gets OOM-killed by the kernel before it exhausts the host. The recommended starting value is 4 GiB; raise if you index very large monorepos.
+- `HAPROXY_FRONTEND_MAXCONN=64` + `HAPROXY_SERVER_MAXCONN=16` — bound concurrent connections at the HAProxy layer so a burst cannot saturate the upstream stdio bridge.
+- `/healthz` is answered directly by HAProxy with a local 200 — Docker's container healthcheck no longer depends on upstream MCP readiness, so a slow LSP startup will not mark the container unhealthy.
 
 ### User & Group IDs
 
@@ -256,10 +282,11 @@ The `SERENA_CONTEXT` environment variable controls which tools Serena exposes, t
 
 | Transport | Protocol | Use Case |
 |:----------|:---------|:---------|
-| `SHTTP` | Streamable HTTP | Best for remote/multi-client setups (default) |
-| `SSE` | Server-Sent Events | Compatible with older MCP clients |
-| `WS` | WebSocket | Real-time bidirectional communication |
-| `STDIO` | Standard I/O | Single local client, lightest mode |
+| `SHTTP` | Streamable HTTP | Best for remote/multi-client setups (default). `/mcp` endpoint. |
+| `SSE` | Server-Sent Events | Compatible with older MCP clients. `/sse` endpoint exposed simultaneously when `PROTOCOL=SHTTP` or `SSE`. |
+| `STDIO` | Standard I/O | Single local client, lightest mode. Bypasses HAProxy and `mcp-proxy`. |
+
+> WebSocket transport was removed when the image migrated from `supergateway` to `mcp-proxy`. `mcp-proxy` does not expose a WS output transport.
 
 ### Claude Code
 
@@ -369,10 +396,10 @@ curl -s http://localhost:9121/healthz
 
 | Transport | `SERENA_TRANSPORT` | `PROTOCOL` | Port exposed | Use when |
 |:----------|:-------------------|:-----------|:-------------|:---------|
-| Pure stdio (lightest) | `stdio` | `STDIO` | none | Single local client; `docker run -i` only |
-| SSE / streamable-HTTP via HAProxy | `stdio` | `SHTTP` (default) | `$PORT` (9121) | Multiple remote clients, need TLS/QUIC |
-| Direct SSE (no HAProxy) | `sse` | *(any)* | `$SERENA_PORT` (9121) | Dev / debug, single client |
-| Streamable HTTP (MCP spec) | `streamable-http` | *(any)* | `$SERENA_PORT` | MCP spec-compliant HTTP client |
+| Pure stdio (lightest) | `stdio` | `STDIO` | none | Single local client; `docker run -i` only. Bypasses HAProxy and `mcp-proxy`. |
+| SHTTP + SSE via HAProxy + mcp-proxy | `stdio` | `SHTTP` (default) | `$PORT` (9121) | Multiple remote clients, need TLS/QUIC. `/mcp` and `/sse` are exposed simultaneously. |
+| Direct SSE from serena (no HAProxy, no mcp-proxy) | `sse` | *(any)* | `$SERENA_PORT` (9121) | Dev / debug, single client |
+| Direct Streamable HTTP from serena (MCP spec) | `streamable-http` | *(any)* | `$SERENA_PORT` | MCP spec-compliant HTTP client direct, no bridging |
 
 ### Common Env Overrides
 
@@ -604,7 +631,8 @@ docker exec serena-mcp ps aux
 - [Serena GitHub Repository](https://github.com/oraios/serena)
 - [Serena on PyPI](https://pypi.org/project/serena-agent/)
 - [MCP Protocol Specification](https://modelcontextprotocol.io/)
-- [Supergateway](https://github.com/nichochar/supergateway)
+- [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) — stdio ↔ StreamableHTTP/SSE bridge
+- [mcp-proxy on PyPI](https://pypi.org/project/mcp-proxy/)
 
 ### Docker Resources
 
