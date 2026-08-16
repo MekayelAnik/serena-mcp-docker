@@ -90,7 +90,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \\
     echo "Installing packages: ${SERENA_PKG} + ${MCP_PROXY_PKG}" && \\
     pip install --no-cache-dir --break-system-packages ${SERENA_PKG} ${MCP_PROXY_PKG} && \\
     echo "Packages installed successfully" && \\
-    mcp-proxy --version || true
+    mcp-proxy --version
 
 # Seed default Serena config (non-interactive dashboard)
 ENV SERENA_HOME=/config/serena
