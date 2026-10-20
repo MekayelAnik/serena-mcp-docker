@@ -12,6 +12,15 @@ SERENA_PKG="serena-agent==${SERENA_VERSION}"
 # requests) — avoids the spawn-per-request memory leak that affected
 # supergateway in stateless mode (supercorp-ai/supergateway#108).
 MCP_PROXY_PKG=$(cat ./build_data/mcp_proxy_version 2>/dev/null || echo "mcp-proxy")
+# mcp-proxy runs in its own venv so its 'mcp' SDK version is independent of
+# Serena's. MCP SDK 2.0 (2026-07-28) removed/renamed APIs that mcp-proxy
+# still imports (e.g. request_ctx), so cap it to 1.x until mcp-proxy supports
+# 2.x. Override via ./build_data/mcp_proxy_mcp_spec (empty file = no cap).
+if [ -f ./build_data/mcp_proxy_mcp_spec ]; then
+    MCP_PROXY_MCP_SPEC=$(cat ./build_data/mcp_proxy_mcp_spec)
+else
+    MCP_PROXY_MCP_SPEC="mcp<2"
+fi
 DOCKERFILE_NAME="Dockerfile.$REPO_NAME"
 
 # Create a temporary file safely
@@ -85,11 +94,20 @@ RUN mkdir -p /opt/nvm && chmod 755 /opt /opt/nvm \\
     && ln -sf "\$(which npx)" /usr/local/bin/npx \\
     && node --version && npm --version
 
-# Install Serena + mcp-proxy from PyPI in one layer (shared pip cache).
+# Install Serena and mcp-proxy in SEPARATE environments.
+#   - Serena: system site-packages, resolves its own 'mcp' version.
+#   - mcp-proxy: dedicated venv at /opt/mcp-proxy with 'mcp' capped (default
+#     mcp<2). mcp-proxy only spawns Serena as a stdio child process, so the
+#     two never need to share an 'mcp' install.
+ARG MCP_PROXY_MCP_SPEC="${MCP_PROXY_MCP_SPEC}"
 RUN --mount=type=cache,target=/root/.cache/pip \\
-    echo "Installing packages: ${SERENA_PKG} + ${MCP_PROXY_PKG}" && \\
-    pip install --no-cache-dir --break-system-packages ${SERENA_PKG} ${MCP_PROXY_PKG} && \\
+    echo "Installing packages: ${SERENA_PKG} + ${MCP_PROXY_PKG} (mcp spec: '\${MCP_PROXY_MCP_SPEC}')" && \\
+    pip install --break-system-packages ${SERENA_PKG} && \\
+    python -m venv /opt/mcp-proxy && \\
+    /opt/mcp-proxy/bin/pip install ${MCP_PROXY_PKG} \${MCP_PROXY_MCP_SPEC:+"\${MCP_PROXY_MCP_SPEC}"} && \\
+    ln -sf /opt/mcp-proxy/bin/mcp-proxy /usr/local/bin/mcp-proxy && \\
     echo "Packages installed successfully" && \\
+    serena --help >/dev/null && \\
     mcp-proxy --version
 
 # Seed default Serena config (non-interactive dashboard)

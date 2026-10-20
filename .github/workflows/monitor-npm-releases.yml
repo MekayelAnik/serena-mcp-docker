@@ -16,7 +16,7 @@ on:
           - force-promote-stable
         default: auto-check
       versions:
-        description: 'Versions to build. Comma-separated (1.4.5,1.5.3), range (1.0.0-1.5.3), or empty for auto from NPM.'
+        description: 'Versions to build. Comma-separated (1.4.5,1.5.3), range (1.0.0-1.5.3), or empty for auto from PyPI.'
         required: false
         type: string
         default: ''
@@ -31,7 +31,7 @@ on:
         type: boolean
         default: false
       custom_latest:
-        description: 'Override which version to promote as latest (leave empty for NPM latest)'
+        description: 'Override which version to promote as latest (leave empty for PyPI latest)'
         required: false
         type: string
         default: ''
@@ -192,7 +192,7 @@ jobs:
       normalized_auto_promote: ${{ steps.normalize.outputs.auto_promote }}
       normalized_custom_latest: ${{ steps.normalize.outputs.custom_latest }}
       versions_json: ${{ steps.releases.outputs.versions_json }}
-      latest_version: ${{ needs.fetch-releases.outputs.normalized_custom_latest != '' && needs.fetch-releases.outputs.normalized_custom_latest || (steps.releases.outputs.latest_version) }}
+      latest_version: ${{ steps.normalize.outputs.custom_latest != '' && steps.normalize.outputs.custom_latest || steps.releases.outputs.latest_version }}
       date_tag: ${{ steps.releases.outputs.date_tag }}
       should_build: ${{ steps.releases.outputs.should_build }}
 
@@ -335,7 +335,7 @@ jobs:
           EXISTING_VERSION=""
           EXISTING_SINCE=""
           if [[ -f state.json ]]; then
-            EXISTING_VERSION="$(jq -r '.pypi_latest_version // .npm_latest_version // .pypi_latest_version // ""' state.json)"
+            EXISTING_VERSION="$(jq -r '.pypi_latest_version // .npm_latest_version // ""' state.json)"
             EXISTING_SINCE="$(jq -r '.latest_version_since // ""' state.json)"
           fi
 
